@@ -260,8 +260,8 @@ def rebind(source):
     print()
 
 
-    input(f"{bc.WARNING}WARNING:{bc.OKGREEN}About to rebind a network that was unBound.... PRESS ENTER TO CONTINUE{bc.ENDC}")
-    print()
+    #input(f"{bc.WARNING}WARNING:{bc.OKGREEN}About to rebind a network that was unBound.... PRESS ENTER TO CONTINUE{bc.ENDC}")
+    #print()
 
     keepList = ['productTypes', 'name', 'timeZone', 'tags', 'notes']
     newNET = {}
@@ -281,7 +281,7 @@ def rebind(source):
     appliances = ['MX', 'Z3']
     serials = []
     for dev in UB_devices:
-        if dev['model'] in appliances:
+        if dev['model'][:2] in appliances:
             removeDevice(db,dev['serial'])
             serials.append(dev['serial'])
     db.networks.claimNetworkDevices(source,serials=serials)

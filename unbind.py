@@ -237,6 +237,14 @@ def copySettings(db, sourceNet, targetNet):
     networkSettings.pop('secureConnect')
     db.networks.updateNetworkSettings(targetNet, **networkSettings)
 
+ 
+    # TODO - need to fix this
+    #contentfilter = db.appliance.getNetworkApplianceContentFiltering(sourceNet)
+    #db.appliance.updateNetworkApplianceContentFiltering(targetNet, **contentfilter)
+    
+    snmp = db.networks.getNetworkSnmp(sourceNet)
+    db.networks.updateNetworkSnmp(targetNet, **snmp)
+
     trafficAnalysis = db.networks.getNetworkTrafficAnalysis(sourceNet)
     db.networks.updateNetworkTrafficAnalysis(targetNet, **trafficAnalysis)
 
@@ -250,12 +258,25 @@ def copySettings(db, sourceNet, targetNet):
     db.appliance.updateNetworkApplianceFirewallL3FirewallRules(targetNet, **l3fw)
     db.appliance.updateNetworkApplianceFirewallL7FirewallRules(targetNet, **l7fw)
 
+    #for templated Networks, this needs to be templateID not sourceNET
+  
     network_obj = db.networks.getNetwork(sourceNet)
     if 'configTemplateId' in network_obj:
         tsrules = db.appliance.getNetworkApplianceTrafficShapingRules(network_obj['configTemplateId']) #THIS PULLS FROM TEMPLATE
+        intrusion = db.appliance.getNetworkApplianceSecurityIntrusion(network_obj['configTemplateId'])
+        malware = db.appliance.getNetworkApplianceSecurityMalware(network_obj['configTemplateId'])
+
     else:
         tsrules = db.appliance.getNetworkApplianceTrafficShapingRules(sourceNet) #NOT a network unbind, but a regular network, oh well keep going
+        intrusion = db.appliance.getNetworkApplianceSecurityIntrusion(sourceNet)
+        malware = db.appliance.getNetworkApplianceSecurityMalware(sourceNet)
+
     db.appliance.updateNetworkApplianceTrafficShapingRules(targetNet, **tsrules)
+    try:
+        db.appliance.updateNetworkApplianceSecurityIntrusion(targetNet, **intrusion)
+        db.appliance.updateNetworkApplianceSecurityMalware(targetNet, **malware)
+    except:
+        pass
 
     site2siteVPN = db.appliance.getNetworkApplianceVpnSiteToSiteVpn(sourceNet)
     try:
@@ -310,6 +331,14 @@ def copySettings(db, sourceNet, targetNet):
     
     #RECLAIM HARDWARE
     db.networks.claimNetworkDevices(targetNet, serials=[sourceMX])
+
+
+    #NOW DO NETFLOW, will error out if you don't add hardware first
+    netflow = db.networks.getNetworkNetflow(sourceNet)
+    try: #need to do this in a try/except because a Z3 will throw an error (or network without license)
+        db.networks.updateNetworkNetflow(targetNet, **netflow)
+    except:
+        pass
 
     #COPY PORTS OVER
     targetNet_ports = db.appliance.getNetworkAppliancePorts(targetNet)
@@ -418,8 +447,9 @@ def unbind(source):
     elapsed_time = round(end_time-start_time,2)
     print(f"Loaded Everything took [{elapsed_time}] seconds")
     print()
-    input(f"{bc.WARNING}WARNING:{bc.OKGREEN}About to unbind a network from a template.... PRESS ENTER TO CONTINUE{bc.ENDC}")
-    print()
+    
+    #input(f"{bc.WARNING}WARNING:{bc.OKGREEN}About to unbind a network from a template.... PRESS ENTER TO CONTINUE{bc.ENDC}")
+    #print()
 
     keepList = ['productTypes', 'name', 'timeZone', 'tags', 'notes']
     newNET = {}
