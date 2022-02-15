@@ -3,6 +3,8 @@
 import copy
 import os
 
+from numpy import source
+
 #import pickle
 import get_keys as g
 #import random
@@ -227,6 +229,19 @@ def copySettings(db, sourceNet, targetNet):
         if not getID(target_vlans,1) == None:
             db.appliance.deleteNetworkApplianceVlan(targetNet, 1)
 
+
+
+    networkSettings = db.networks.getNetworkSettings(sourceNet)
+    networkSettings.pop('remoteStatusPageEnabled')
+    networkSettings.pop('fips')
+    networkSettings.pop('secureConnect')
+    db.networks.updateNetworkSettings(targetNet, **networkSettings)
+
+    trafficAnalysis = db.networks.getNetworkTrafficAnalysis(sourceNet)
+    db.networks.updateNetworkTrafficAnalysis(targetNet, **trafficAnalysis)
+
+    alerts = db.networks.getNetworkAlertsSettings(sourceNet)
+    db.networks.updateNetworkAlertsSettings(targetNet, **alerts)
 
     src_syslog = db.networks.getNetworkSyslogServers(sourceNet)
     db.networks.updateNetworkSyslogServers(targetNet,**src_syslog)
