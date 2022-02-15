@@ -235,10 +235,13 @@ def copySettings(db, sourceNet, targetNet):
     networkSettings.pop('secureConnect')
     db.networks.updateNetworkSettings(targetNet, **networkSettings)
 
- 
-    # TODO - need to fix this
-    #contentfilter = db.appliance.getNetworkApplianceContentFiltering(sourceNet)
-    #db.appliance.updateNetworkApplianceContentFiltering(targetNet, **contentfilter)
+    #content filter barfs on the blockedURL categories, need to filter out to just the ID
+    contentfilter = db.appliance.getNetworkApplianceContentFiltering(sourceNet)
+    blockedUrls = []
+    for cf in contentfilter['blockedUrlCategories']:
+        blockedUrls.append(cf['id'])
+    contentfilter['blockedUrlCategories'] = blockedUrls
+    db.appliance.updateNetworkApplianceContentFiltering(targetNet, **contentfilter)
     
     snmp = db.networks.getNetworkSnmp(sourceNet)
     db.networks.updateNetworkSnmp(targetNet, **snmp)
