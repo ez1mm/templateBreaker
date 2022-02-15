@@ -22,6 +22,11 @@ from deepdiff import DeepDiff
 
 from bcolors import bcolors as bc
 
+isExist = os.path.exists('Logs')
+if not isExist:
+    os.makedirs('Logs')
+    
+
 db = meraki.DashboardAPI(
             api_key=g.get_api_key(), 
             base_url='https://api.meraki.com/api/v1/', 
