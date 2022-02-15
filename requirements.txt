@@ -1,0 +1,4 @@
+aiohttp>=3.7.4.post0
+tqdm>=4.62.3
+deepdiff>=5.7.0
+meraki>=1.15.0
