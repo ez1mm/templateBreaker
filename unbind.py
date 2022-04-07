@@ -291,7 +291,10 @@ def copySettings(db, sourceNet, targetNet):
     if FW_target != FW_source:
         print(f"{bc.FAIL}WARNING: {bc.OKGREEN}Firmware of source[{bc.WARNING}{FW_source}{bc.OKGREEN}] doesn't match target[{bc.WARNING}{FW_target}{bc.OKGREEN}].... fixing that....{bc.ENDC}")
         products={'appliance': {'nextUpgrade': {'toVersion': {'id': FW_source}}}}
-        db.networks.updateNetworkFirmwareUpgrades(targetNet, products=products)
+        if FW_source < FW_target:
+            db.networks.updateNetworkFirmwareUpgrades(targetNet, products=products)
+        else:
+            db.networks.createNetworkFirmwareUpgradesRollback(targetNet, products=products)
 
     #print(f"Ready to move the hardware? (YES to continue)")
     #if not input('>') == "YES":
@@ -390,6 +393,7 @@ async def getEverything():
                 maximum_retries= 100,
                 wait_on_rate_limit=True,
                 print_console=False,
+
                 
         ) as aio:
             orgs_raw = await aio.organizations.getOrganizations()
