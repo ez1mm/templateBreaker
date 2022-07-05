@@ -31,8 +31,7 @@ db = meraki.DashboardAPI(
             print_console=False)
 
 
-targetORG = '577586652210266696'
-#targetORG = '123412341234'
+targetORG = '123412341234'
 
 networkTAG_UNBIND = 'UNBIND_ME_Group1'
 networkTAG_DONE = 'UNBIND_ME_Group1_DONE'
@@ -97,7 +96,7 @@ async def main():
     async with aiohttp.ClientSession() as aiosess:
 
         tasks = []
-        for t in targetNets:
+            for t in targetNets:
             tasks.append(asyncio.ensure_future(post_unbindNetwork(aiosess,t['id'])))
             print(t)
 
