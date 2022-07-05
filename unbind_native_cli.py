@@ -31,18 +31,13 @@ db = meraki.DashboardAPI(
             print_console=False)
 
 
-targetORG = '123412341234'
+targetORG = '577586652210266696'
+#targetORG = '123412341234'
+
 networkTAG_UNBIND = 'UNBIND_ME_Group1'
 networkTAG_DONE = 'UNBIND_ME_Group1_DONE'
 
 start_time = time.time()
-
-
-async def get_pokemon(session, url):
-    async with session.get(url) as resp:
-        pokemon = await resp.json()
-        return pokemon['name']
-
 
 def getPOSTurlNetid(netID):
     return f"https://api.meraki.com/api/v1/networks/{str(netID)}/unbind?retainConfigs=True"
@@ -57,16 +52,31 @@ async def post_unbindNetwork(aiosess, netID):
         "X-Cisco-Meraki-API-Key" : g.get_api_key()    
     }
     
-    result = f"Network[{netID}] Done \n"
+    result = f"Network[{netID}] - "
+    print(f"NetID[{netID}] queued......")
     async with aiosess.post(url, headers=headers) as resp:
         result = result + await resp.text()
-    
+
+                
+
     if not "error" in result:
-        tags = db.networks.getNetwork(netID)['tags']
-        if networkTAG_UNBIND in tags:
-            tags.remove(networkTAG_UNBIND)
-        tags.append(networkTAG_DONE)
-        db.networks.updateNetwork(netID, tags = tags)
+        netTemp = db.networks.getNetwork(netID)
+        if not netTemp['isBoundToConfigTemplate']:
+            net = db.networks.getNetwork(netID)
+            tags = net['tags']
+            if networkTAG_UNBIND in tags:
+                tags.remove(networkTAG_UNBIND)
+            tags.append(networkTAG_DONE)
+            db.networks.updateNetwork(netID, tags = tags)
+            print(f"Network[{net['name']}] NetID[{net['id']}] Completed!!!")
+            result = result + f"Network[{net['name']}] NetID[{net['id']}] Completed!!!"
+            return result
+        else:
+            print(f"FAILURE on Network[{net['name']}] NetId[{net['id']}]")
+            print(f"\tRESULT: {result}")
+            result = result + f"  FAILURE on Network[{net['name']}] NetId[{net['id']}]"
+            return result
+    print(f"Completed without return/result......")
     return result
 
 async def main():
@@ -96,6 +106,8 @@ async def main():
         print()
 
         unbound = await asyncio.gather(*tasks)
+
+        print(f"\nPrinting results.....")
         for r in unbound:
             print(r)
 
