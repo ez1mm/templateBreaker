@@ -70,11 +70,12 @@ async def post_unbindNetwork(aiosess, netID):
             print(f"Network[{net['name']}] NetID[{net['id']}] Completed!!!")
             result = result + f"Network[{net['name']}] NetID[{net['id']}] Completed!!!"
             return result
-        else:
-            print(f"FAILURE on Network[{net['name']}] NetId[{net['id']}]")
-            print(f"\tRESULT: {result}")
-            result = result + f"  FAILURE on Network[{net['name']}] NetId[{net['id']}]"
-            return result
+    else:
+        print(f"FAILURE on Network[{net['name']}] NetId[{net['id']}]")
+        print(f"\tRESULT: {result}")
+        result = result + f"  FAILURE on Network[{net['name']}] NetId[{net['id']}]"
+        return result
+        
     print(f"Completed without return/result......")
     return result
 
