@@ -36,7 +36,7 @@ targetORG = '123412341234'
 
 
 networkTAG_UNBIND = 'UNBIND_ME_Group1'
-networkTAG_DONE = 'UNBIND_ME_Group1_DONE'
+networkTAG_DONE = networkTAG_UNBIND + '_DONE'
 
 start_time = time.time()
 
@@ -55,12 +55,16 @@ async def post_unbindNetwork(aiosess, netID):
     
     #return
     
+    instance_time = time.time()
+
     result = f"Network[{netID}] - "
     print(f"NetID[{netID}] queued......")
     async with aiosess.post(url, headers=headers) as resp:
         result = result + await resp.text()
 
-                
+    diffTime = time.time() - instance_time
+    result = result + (f" Net[{netID}] Comleted[{diffTime}]seconds")
+    print(result)
 
     if not "error" in result:
         netTemp = db.networks.getNetwork(netID)
@@ -75,9 +79,9 @@ async def post_unbindNetwork(aiosess, netID):
             result = result + f"Network[{net['name']}] NetID[{net['id']}] Completed!!!"
             return result
     else:
-        print(f"FAILURE on Network[{net['name']}] NetId[{net['id']}]")
+        print(f"FAILURE on Network[{netTemp['name']}] NetId[{netTemp['id']}]")
         print(f"\tRESULT: {result}")
-        result = result + f"  FAILURE on Network[{net['name']}] NetId[{net['id']}]"
+        result = result + f"  FAILURE on Network[{netTemp['name']}] NetId[{netTemp['id']}]"
         return result
         
     print(f"Completed without return/result......")
@@ -98,7 +102,7 @@ async def main():
     print()
     print(f"Found {len(targetNets)} networks in scope using tag[{networkTAG_UNBIND}] ")
 
-    timeout_obj = aiohttp.ClientTimeout(total=6000)
+    timeout_obj = aiohttp.ClientTimeout(6000)
     async with aiohttp.ClientSession(timeout=timeout_obj) as aiosess:
 
         tasks = []
@@ -110,11 +114,18 @@ async def main():
         print("AWAITING.....")
         print()
 
-        unbound = await asyncio.gather(*tasks)
+    
+        print(f"\Results:")
 
-        print(f"\nPrinting results.....")
-        for r in unbound:
-            print(r)
+        for task in tqdm.tqdm(asyncio.as_completed(tasks), total=len(tasks), colour='green'):
+        #unbound = await asyncio.gather(*tasks)
+            print(await task)
+            #await task
+
+    
+        #print(f"\nPrinting results.....")
+        #for r in unbound:
+        #    print(r)
 
     print()
     print(f"DONE")
