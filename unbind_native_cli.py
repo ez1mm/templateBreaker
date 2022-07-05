@@ -1,6 +1,7 @@
 #!/usr/bin/ipython3 -i
 
 from unittest import result
+from async_timeout import timeout
 import meraki
 import copy
 import asyncio
@@ -33,6 +34,7 @@ db = meraki.DashboardAPI(
 
 targetORG = '123412341234'
 
+
 networkTAG_UNBIND = 'UNBIND_ME_Group1'
 networkTAG_DONE = 'UNBIND_ME_Group1_DONE'
 
@@ -50,6 +52,8 @@ async def post_unbindNetwork(aiosess, netID):
         'cache-control': "no-cache",
         "X-Cisco-Meraki-API-Key" : g.get_api_key()    
     }
+    
+    #return
     
     result = f"Network[{netID}] - "
     print(f"NetID[{netID}] queued......")
@@ -94,10 +98,11 @@ async def main():
     print()
     print(f"Found {len(targetNets)} networks in scope using tag[{networkTAG_UNBIND}] ")
 
-    async with aiohttp.ClientSession() as aiosess:
+    timeout_obj = aiohttp.ClientTimeout(total=6000)
+    async with aiohttp.ClientSession(timeout=timeout_obj) as aiosess:
 
         tasks = []
-            for t in targetNets:
+        for t in targetNets:
             tasks.append(asyncio.ensure_future(post_unbindNetwork(aiosess,t['id'])))
             print(t)
 
