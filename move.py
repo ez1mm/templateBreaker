@@ -338,7 +338,8 @@ def copySettings(db, sourceNet, targetNet, target_template):
         except:
             print(f"Can't create VLAN")
             print(v)
-        
+    
+    #This section handles only DHCP stuff
     for v in src_vlans:
         vlan = v['id']
         keepers = ['fixedIpAssignments', 'reservedIpRanges', 'dhcpHandling', 'dhcpLeaseTime', 'dnsNameservers', 'dhcpOptions', 'dhcpBootOptionsEnabled', 'vlanId']
@@ -349,15 +350,15 @@ def copySettings(db, sourceNet, targetNet, target_template):
                 newVlan[tmp] = v[tmp]
         if newVlan['vlanId'] in dst_GPMAP:
             newVlan['groupPolicyId'] = dst_GPMAP[newVlan['vlanId'] ]
-        #print(newVlan)
-        res = db.appliance.updateNetworkApplianceVlan(targetNet, **newVlan)
+            #print(newVlan)
+            res = db.appliance.updateNetworkApplianceVlan(targetNet, **newVlan)
         #print(res)
 
     #remove the default vlan1 if the source doesn't have it
     if getID(src_vlans, 1) == None:
         target_vlans = db.appliance.getNetworkApplianceVlans(targetNet)
         if not getID(target_vlans,1) == None:
-            db.appliance.deleteNetworkApplianceVlan(targetNet, 1)
+            db.appliance.deleteNetworkApplianceVlan(targetNet, str(1))
 
 
 
@@ -410,23 +411,31 @@ def copySettings(db, sourceNet, targetNet, target_template):
         db.appliance.updateNetworkApplianceSecurityMalware(targetNet, **malware)
     except:
         pass
-
+    
+    
+    ''' 
+    #not needed for a template->template move
     site2siteVPN = db.appliance.getNetworkApplianceVpnSiteToSiteVpn(sourceNet)
     try:
         db.appliance.updateNetworkApplianceVpnSiteToSiteVpn(targetNet, **site2siteVPN)
     except:
         print(f"Error trying to write the site2site rules, make sure your HUB/Spoke configuration is correct and try again")
+   
 
-    #Make sure firmware matches
-    FW_source = db.networks.getNetworkFirmwareUpgrades(sourceNet)['products']['appliance']['currentVersion']['id']
-    FW_target = db.networks.getNetworkFirmwareUpgrades(targetNet)['products']['appliance']['currentVersion']['id']
-    if FW_target != FW_source:
-        print(f"{bc.FAIL}WARNING: {bc.OKGREEN}Firmware of source[{bc.WARNING}{FW_source}{bc.OKGREEN}] doesn't match target[{bc.WARNING}{FW_target}{bc.OKGREEN}].... fixing that....{bc.ENDC}")
-        products={'appliance': {'nextUpgrade': {'toVersion': {'id': FW_source}}}}
-        if FW_source < FW_target:
-            db.networks.updateNetworkFirmwareUpgrades(targetNet, products=products)
-        else:
-            db.networks.createNetworkFirmwareUpgradesRollback(targetNet, products=products)
+    #Make sure firmware matches (i mean..... you don't have to... you create an empty network that matches the current template, and then bind it to the new template before you move hardware, so it'll be changed to the target firmware of the template anyway
+    upgrade_prods = db.networks.getNetworkFirmwareUpgrades(sourceNet)['products']
+    for p in upgrade_prods: #wired / wireless / appliance
+
+        FW_source = db.networks.getNetworkFirmwareUpgrades(sourceNet)['products'][p]['currentVersion']['id']
+        FW_target = db.networks.getNetworkFirmwareUpgrades(targetNet)['products'][p]['currentVersion']['id']
+        if FW_target != FW_source:
+            print(f"{bc.FAIL}WARNING: {bc.OKGREEN}{p.upper()} Firmware of source[{bc.WARNING}{FW_source}{bc.OKGREEN}] doesn't match target[{bc.WARNING}{FW_target}{bc.OKGREEN}].... fixing that....{bc.ENDC}")
+            products={p: {'nextUpgrade': {'toVersion': {'id': FW_source}}}}
+            if FW_source < FW_target:
+                db.networks.updateNetworkFirmwareUpgrades(targetNet, products=products)
+            else:
+                db.networks.createNetworkFirmwareUpgradesRollback(targetNet, products=products)
+    '''
 
     #print(f"Ready to move the hardware? (YES to continue)")
     #if not input('>') == "YES":
@@ -450,7 +459,7 @@ def copySettings(db, sourceNet, targetNet, target_template):
         if newVlan['vlanId'] in dst_GPMAP:
             newVlan['groupPolicyId'] = dst_GPMAP[newVlan['vlanId'] ]
         #print(newVlan)
-        res = db.appliance.updateNetworkApplianceVlan(targetNet, **newVlan)
+            res = db.appliance.updateNetworkApplianceVlan(targetNet, **newVlan)
         #print(res)
 
 
@@ -463,12 +472,16 @@ def copySettings(db, sourceNet, targetNet, target_template):
         if sd['model'][:2] in validProducts:
             sourceMX = sd['serial']
     
+    '''
+    #This isn't needed for a template move, since we're not trying to preserve firmware versions....
     #LOOP until firmware in target network matches source... so the MX won't re-download FW and reboot
     while not FW_target == FW_source:
         FW_raw = db.networks.getNetworkFirmwareUpgrades(targetNet)
         FW_target = FW_raw['products']['appliance']['currentVersion']['id']
         print(f"{bc.FAIL}WARNING: {bc.OKGREEN}Waiting for firmware upgrade to finish...currently running fwID[{bc.WARNING}{FW_target}{bc.OKGREEN}] instead of fwID[{bc.WARNING}{FW_source}{bc.OKGREEN}]{bc.ENDC}")
         sleep(5)
+    '''
+
     #You need to query the templateID, not the sourceNetwork.
     tempNetID = returnTemplateID(db, sourceNet) 
     ports = db.appliance.getNetworkAppliancePorts(tempNetID)
@@ -487,7 +500,7 @@ def copySettings(db, sourceNet, targetNet, target_template):
     serials_claim = []
     for sd in sourceNet_devs:
         serials_claim.append(sd['serial'])
-        print(f"{bc.OKGREEN} -Attempting moving of {bc.OKBLUE}{sd['model']} {sd['serial']}{bc.OKGREEN} from {bc.WARNING}{sourceNet}{bc.ENDC}")
+        print(f"{bc.OKGREEN} -Attempting moving of {bc.WARNING}{sd['model']} {bc.OKBLUE}{sd['serial']}{bc.OKGREEN} from {bc.WARNING}{sourceNet}{bc.ENDC}")
         tries = 0
         while True:
             try:
@@ -619,13 +632,53 @@ async def getEverything():
 
 ### /ASYNC SECTION   
 
+def getGoodTemplateID(garbage):
+    garbage = garbage.strip()
+    results = []
+    foundNames = 0
+    for o in templates:
+        for t in templates[o]:
+            if t['id'] == garbage:
+                print(f"The TemplateID is good!!!")
+                results.append((o,t['id'])) #save it as a tuple
+            elif t['name'] == garbage:
+                print(f"Found TemplateID by name! Its [{t['id']}] for {t['name']}")
+                foundNames += 1
+                results.append((o,t['id']))
+
+    org_id = None
+    template_id = None
+    if len(results) == 1:
+        org_id, template_id = results[0]
+    elif len(results) > 1:
+        if foundNames > 0:
+            print(f"{bc.FAIL} Found too many templates with the same name. Try using the templateID instead...{bc.ENDC}")
+            for r in results:
+                oid,tid = r
+                org_name = db.organizations.getOrganization(oid)['name']
+                print(f"{bc.OKGREEN}Oranization[{bc.WARNING}{org_name}{bc.OKGREEN}] Org_ID[{bc.WARNING}{oid}{bc.OKGREEN}]  TemplateID[{bc.WARNING}{tid}{bc.OKGREEN}] ")
+                
+        
+
+    return org_id, template_id
+        
+
 @click.command()
 @click.argument('source', default = '')
 @click.argument('template', default = '')
 def move(source, template):
 
+    
     network_obj = None
     org_id = ""
+
+    org_id, templateID = getGoodTemplateID(template)
+    if not templateID == None: 
+        template = templateID
+    else:
+        print()
+        print(f"{bc.FAIL}ERROR:{bc.OKGREEN} Cannot find the templateID. Check your input and try again...{bc.ENDC}")
+        return
 
     try:
         network_obj = db.networks.getNetwork(source)
@@ -633,7 +686,9 @@ def move(source, template):
     except Exception as e:
         print(e)
 
-    
+    if network_obj == None: 
+        print(f"ERROR: Network not found")
+
     print()
 
    
@@ -700,6 +755,10 @@ def move(source, template):
         db.networks.updateNetwork(source, name=tempNAME)
         db.networks.updateNetwork(target_netid, name=oldName)
         db.networks.updateNetwork(source, name=newNET['name'])
+        if len(db.networks.getNetworkDevices(source)) == 0:
+            print(f"Old Network is empty, deleting netID[{source}]")
+            db.networks.deleteNetwork(source)
+        
         #db.networks.deleteNetwork(source)
         print()
         print(f"{bc.WARNING}SUCCESS -{bc.OKGREEN} network moved successfully in [{bc.WARNING}{elapsed_time}{bc.OKGREEN}]seconds... new networkID[{bc.WARNING}{target_netid}{bc.OKGREEN}] {bc.ENDC}")
@@ -711,7 +770,7 @@ def move(source, template):
     else: #if it didn't copy properly, delete the new-network we created
         print()
         print(f"{bc.FAIL}FAILED -{bc.OKGREEN} network could not be moved {bc.ENDC}")
-        db.networks.deleteNetwork(target_netid)
+        #db.networks.deleteNetwork(target_netid)
         print()
 
   
