@@ -282,164 +282,8 @@ def claimSerials(new_serial, target_netID):
     print(f"Failed Serials: {failed}")
     return
 
-
 #clone/copy/move the device betwnee source and target
-def copySettings(db, sourceNet, targetNet, target_template):
-
-    #quick logic check here 
-    dst_vlans = db.appliance.getNetworkApplianceVlans(target_template)
-    target_VLANIDS = []
-    for v in dst_vlans:
-        if not v['id'] in target_VLANIDS: target_VLANIDS.append(v['id'])
-    target_VLANIDS.sort()
-
-    src_vlans = db.appliance.getNetworkApplianceVlans(sourceNet)
-    source_VLANIDS = []
-    for v in src_vlans:
-        if not v['id'] in source_VLANIDS: source_VLANIDS.append(v['id'])
-    source_VLANIDS.sort()
-
-    if not target_VLANIDS == source_VLANIDS:
-        print(f"{bc.FAIL}ERROR: {bc.OKGREEN} Target VLAN/Subnetting doesn't match source. Needs to have the same amount of vlans with the same VLAN-IDs... {bc.OKGREEN}]{bc.ENDC}")
-        print(f"{bc.OKGREEN} SOURCE VLANS[{bc.WARNING}{source_VLANIDS}{bc.OKGREEN}] TARGET_VLANS[{bc.WARNING}{target_VLANIDS}{bc.OKGREEN}]{bc.ENDC}")
-        return False
-    else:
-        print(f"{bc.OKGREEN} SOURCE VLANS[{bc.WARNING}{source_VLANIDS}{bc.OKGREEN}] match Target Template[{bc.WARNING}{target_VLANIDS}{bc.OKGREEN}]{bc.ENDC}")
-        
-
-
-    src_groupPolicies = db.networks.getNetworkGroupPolicies(sourceNet)
-    dst_groupPolicies = []
-    for gp in src_groupPolicies:
-        if 'groupPolicyId' in gp: gp.pop('groupPolicyId')
-        fixGP(gp)
-        try:
-            dst_groupPolicies.append(db.networks.createNetworkGroupPolicy(targetNet, **gp))
-        except:
-            pass
-    
-    src_groupPolicies = db.networks.getNetworkGroupPolicies(sourceNet)
-    dst_groupPolicies = db.networks.getNetworkGroupPolicies(targetNet)
-
-
-    db.appliance.updateNetworkApplianceVlansSettings(targetNet, vlansEnabled = True)
-    #src_vlans = db.appliance.getNetworkApplianceVlans(sourceNet)
-    dst_GPMAP = {}
-    for v in src_vlans:
-        v.pop('networkId')
-        if 'groupPolicyId' in v:
-            oldName = findGPName(src_groupPolicies,v['groupPolicyId'])
-            newID = findGPID(dst_groupPolicies, oldName)
-            v['groupPolicyId'] = newID
-            dst_GPMAP[str(v['id'])] = copy.deepcopy(newID)
-        try:
-            result = db.appliance.createNetworkApplianceVlan(targetNet, **v)
-            #print(result)
-        except:
-            print(f"Can't create VLAN")
-            print(v)
-    
-    #This section handles only DHCP stuff
-    for v in src_vlans:
-        vlan = v['id']
-        keepers = ['fixedIpAssignments', 'reservedIpRanges', 'dhcpHandling', 'dhcpLeaseTime', 'dnsNameservers', 'dhcpOptions', 'dhcpBootOptionsEnabled', 'vlanId']
-        if not 'vlanId' in v: v['vlanId'] = vlan
-        newVlan = {}
-        for tmp in v:
-            if tmp in keepers:
-                newVlan[tmp] = v[tmp]
-        if newVlan['vlanId'] in dst_GPMAP:
-            newVlan['groupPolicyId'] = dst_GPMAP[newVlan['vlanId'] ]
-            #print(newVlan)
-            res = db.appliance.updateNetworkApplianceVlan(targetNet, **newVlan)
-        #print(res)
-
-    #remove the default vlan1 if the source doesn't have it
-    if getID(src_vlans, 1) == None:
-        target_vlans = db.appliance.getNetworkApplianceVlans(targetNet)
-        if not getID(target_vlans,1) == None:
-            db.appliance.deleteNetworkApplianceVlan(targetNet, str(1))
-
-
-
-    networkSettings = db.networks.getNetworkSettings(sourceNet)
-    networkSettings.pop('remoteStatusPageEnabled')
-    networkSettings.pop('fips')
-    networkSettings.pop('secureConnect')
-    db.networks.updateNetworkSettings(targetNet, **networkSettings)
-
-    #content filter barfs on the blockedURL categories, need to filter out to just the ID
-    contentfilter = db.appliance.getNetworkApplianceContentFiltering(sourceNet)
-    blockedUrls = []
-    for cf in contentfilter['blockedUrlCategories']:
-        blockedUrls.append(cf['id'])
-    contentfilter['blockedUrlCategories'] = blockedUrls
-    db.appliance.updateNetworkApplianceContentFiltering(targetNet, **contentfilter)
-    
-    snmp = db.networks.getNetworkSnmp(sourceNet)
-    db.networks.updateNetworkSnmp(targetNet, **snmp)
-
-    trafficAnalysis = db.networks.getNetworkTrafficAnalysis(sourceNet)
-    db.networks.updateNetworkTrafficAnalysis(targetNet, **trafficAnalysis)
-
-    alerts = db.networks.getNetworkAlertsSettings(sourceNet)
-    db.networks.updateNetworkAlertsSettings(targetNet, **alerts)
-
-    src_syslog = db.networks.getNetworkSyslogServers(sourceNet)
-    db.networks.updateNetworkSyslogServers(targetNet,**src_syslog)
-    l3fw = db.appliance.getNetworkApplianceFirewallL3FirewallRules(sourceNet)
-    l7fw = db.appliance.getNetworkApplianceFirewallL7FirewallRules(sourceNet)
-    db.appliance.updateNetworkApplianceFirewallL3FirewallRules(targetNet, **l3fw)
-    db.appliance.updateNetworkApplianceFirewallL7FirewallRules(targetNet, **l7fw)
-
-    #for templated Networks, this needs to be templateID not sourceNET
-  
-    network_obj = db.networks.getNetwork(sourceNet)
-    if 'configTemplateId' in network_obj:
-        tsrules = db.appliance.getNetworkApplianceTrafficShapingRules(network_obj['configTemplateId']) #THIS PULLS FROM TEMPLATE
-        intrusion = db.appliance.getNetworkApplianceSecurityIntrusion(network_obj['configTemplateId'])
-        malware = db.appliance.getNetworkApplianceSecurityMalware(network_obj['configTemplateId'])
-
-    else:
-        tsrules = db.appliance.getNetworkApplianceTrafficShapingRules(sourceNet) #NOT a network unbind, but a regular network, oh well keep going
-        intrusion = db.appliance.getNetworkApplianceSecurityIntrusion(sourceNet)
-        malware = db.appliance.getNetworkApplianceSecurityMalware(sourceNet)
-
-    db.appliance.updateNetworkApplianceTrafficShapingRules(targetNet, **tsrules)
-    try:
-        db.appliance.updateNetworkApplianceSecurityIntrusion(targetNet, **intrusion)
-        db.appliance.updateNetworkApplianceSecurityMalware(targetNet, **malware)
-    except:
-        pass
-    
-    
-    ''' 
-    #not needed for a template->template move
-    site2siteVPN = db.appliance.getNetworkApplianceVpnSiteToSiteVpn(sourceNet)
-    try:
-        db.appliance.updateNetworkApplianceVpnSiteToSiteVpn(targetNet, **site2siteVPN)
-    except:
-        print(f"Error trying to write the site2site rules, make sure your HUB/Spoke configuration is correct and try again")
-   
-
-    #Make sure firmware matches (i mean..... you don't have to... you create an empty network that matches the current template, and then bind it to the new template before you move hardware, so it'll be changed to the target firmware of the template anyway
-    upgrade_prods = db.networks.getNetworkFirmwareUpgrades(sourceNet)['products']
-    for p in upgrade_prods: #wired / wireless / appliance
-
-        FW_source = db.networks.getNetworkFirmwareUpgrades(sourceNet)['products'][p]['currentVersion']['id']
-        FW_target = db.networks.getNetworkFirmwareUpgrades(targetNet)['products'][p]['currentVersion']['id']
-        if FW_target != FW_source:
-            print(f"{bc.FAIL}WARNING: {bc.OKGREEN}{p.upper()} Firmware of source[{bc.WARNING}{FW_source}{bc.OKGREEN}] doesn't match target[{bc.WARNING}{FW_target}{bc.OKGREEN}].... fixing that....{bc.ENDC}")
-            products={p: {'nextUpgrade': {'toVersion': {'id': FW_source}}}}
-            if FW_source < FW_target:
-                db.networks.updateNetworkFirmwareUpgrades(targetNet, products=products)
-            else:
-                db.networks.createNetworkFirmwareUpgradesRollback(targetNet, products=products)
-    '''
-
-    #print(f"Ready to move the hardware? (YES to continue)")
-    #if not input('>') == "YES":
-    #    sys.exit()
+def copySettings(db, sourceNet, targetNet, target_template, destination_org):
 
     ## TIME TO BIND
     bindData = {}
@@ -447,21 +291,6 @@ def copySettings(db, sourceNet, targetNet, target_template):
     bindData['autoBind'] = False
     db.networks.bindNetwork(targetNet, **bindData)
     
-    for v in src_vlans:
-        vlan = v['id']
-        #keepers = ['fixedIpAssignments', 'reservedIpRanges', 'dhcpHandling', 'dhcpLeaseTime', 'dnsNameservers', 'dhcpOptions', 'dhcpBootOptionsEnabled', 'vlanId']
-        keepers = ['name', 'applianceIp', 'subnet', 'vlanId']
-        if not 'vlanId' in v: v['vlanId'] = vlan
-        newVlan = {}
-        for tmp in v:
-            if tmp in keepers:
-                newVlan[tmp] = v[tmp]
-        if newVlan['vlanId'] in dst_GPMAP:
-            newVlan['groupPolicyId'] = dst_GPMAP[newVlan['vlanId'] ]
-        #print(newVlan)
-            res = db.appliance.updateNetworkApplianceVlan(targetNet, **newVlan)
-        #print(res)
-
 
 ### MOVE THE HARDWARE
     ### MOVE-MX
@@ -522,49 +351,19 @@ def copySettings(db, sourceNet, targetNet, target_template):
         for p in switch_ports:
             all_actions.append(db.batch.switch.updateDeviceSwitchPort(ss,**p))
     
-    orgid = network_obj['organizationId']
 
-    test_helper = batch_helper.BatchHelper(db, orgid, all_actions, linear_new_batches=False, actions_per_new_batch=50)
+    test_helper = batch_helper.BatchHelper(db, destination_org, all_actions, linear_new_batches=False, actions_per_new_batch=50)
     test_helper.prepare()
     test_helper.generate_preview()
     test_helper.execute()
 
     print(f'helper status is {test_helper.status}')
 
-    batches_report = db.organizations.getOrganizationActionBatches(orgid)
+    batches_report = db.organizations.getOrganizationActionBatches(destination_org)
     new_batches_statuses = [{'id': batch['id'], 'status': batch['status']} for batch in batches_report if batch['id'] in test_helper.submitted_new_batches_ids]
     failed_batch_ids = [batch['id'] for batch in new_batches_statuses if batch['status']['failed']]
     print(f'Failed batch IDs are as follows: {failed_batch_ids}')
 
-
-    #NOW DO NETFLOW, will error out if you don't add hardware first
-    netflow = db.networks.getNetworkNetflow(sourceNet)
-    try: #need to do this in a try/except because a Z3 will throw an error (or network without license)
-        db.networks.updateNetworkNetflow(targetNet, **netflow)
-    except:
-        print("No Netflow settings....")
-
-    #COPY PORTS OVER
-    targetNet_ports = db.appliance.getNetworkAppliancePorts(targetNet)
-    if not getID(targetNet_ports, 1) == None: #corner case where template/source doesn't have port1, automatically disable. If it exists and isn't disabled, actual value will be configured
-        db.appliance.updateNetworkAppliancePort(targetNet, portId = 1, enabled = False )
-    for p in ports:
-        p['portId'] = p['number']
-        try:
-            if not p['enabled']:
-                db.appliance.updateNetworkAppliancePort(targetNet, portId = p['portId'], enabled = False )
-            else:
-                db.appliance.updateNetworkAppliancePort(targetNet, **p)
-        except:
-            break
-    
-
-    #fwServices = db.appliance.getNetworkApplianceFirewallFirewalledServices(sourceNet)
-    #db.appliance.updateNetworkApplianceFirewall
-
-    #routes = db.appliance.getNetworkApplianceStaticRoutes(templateid)
-    #db.appliance.update
-    #return 
     return True #done with copySettings
 
 ### /TOOLS SECTION
@@ -632,11 +431,12 @@ async def getEverything():
 
 ### /ASYNC SECTION   
 
-def getGoodTemplateID(garbage):
+def getGoodTemplateID(oid,garbage):
     garbage = garbage.strip()
     results = []
     foundNames = 0
     for o in templates:
+        if not oid == '' and not oid == o: continue #if you specified a target org, only process that data otherwise look everywhere
         for t in templates[o]:
             if t['id'] == garbage:
                 print(f"The TemplateID is good!!!")
@@ -666,13 +466,69 @@ def getGoodTemplateID(garbage):
 @click.command()
 @click.argument('source', default = '')
 @click.argument('template', default = '')
-def move(source, template):
+@click.argument('destination_org', default = '')
+def move(source, template, destination_org):
 
+    #loop = asyncio.get_event_loop()
+    start_time = time()
+    org_devices, org_networks, org_templates = asyncio.run(getEverything())
+    end_time = time()
+    elapsed_time = round(end_time-start_time,2)
+    print(f"Loaded Everything took [{elapsed_time}] seconds")
+    print()
     
+
+    if source == '':
+        print(f'Please enter Source Network (to move between templates), use Network_ID or Name as valid input')
+        source = input(">")
+    
+    if not isNetID(source):
+        print(f"Looks like a named network... searching....")
+        print(source)
+        for t_oid in org_networks:
+            t_nets = org_networks[t_oid]
+            for t_nid in t_nets:
+                if t_nid['name'].lower() == source.lower():
+                    source = t_nid['id']
+
+    if not isNetID(source):
+        print(f"Still not found..... sorry")
+        exit()
+    
+    if template == '':
+        print(f'Please enter Destination Template Name or TemplateID')
+        template = input(">")
+
     network_obj = None
     org_id = ""
 
-    org_id, templateID = getGoodTemplateID(template)
+    if destination_org == '':
+        print(f"Enter destination org here, cross-org moves require input here:")
+        destination_org = input(">")
+        if not destination_org in orgs_whitelist:
+            orgs = db.organizations.getOrganizations()
+            print(f"Searching for Destination_Org Name[{destination_org}]")
+            res = findName(orgs,destination_org)
+
+            if len(res) == 1: #should be true at this point unless there's no results
+                destination_org = res[0]['id']
+                print(f"Setting Destination_Org to {destination_org}")
+            
+            while len(res) > 1: #basically like an if statement until it's not-true
+                found_it = False
+                for tmp in res:
+                    if tmp['name'] == destination_org:
+                        destination_org = tmp['id']
+                        print(f"Found it! {tmp}")
+                        found_it = True
+                if found_it: break
+                print(res)
+                print()
+                print(f"Too many results, try entering a more specific ORG name")
+                destination_org = input('>')
+                res = findName(orgs,destination_org)  
+            
+    destination_org, templateID = getGoodTemplateID(destination_org, template) #if destination_org is <blank> at this point,then the returning call will populate the actual destination_orgid
     if not templateID == None: 
         template = templateID
     else:
@@ -682,7 +538,7 @@ def move(source, template):
 
     try:
         network_obj = db.networks.getNetwork(source)
-        org_id = network_obj['organizationId']
+        org_id = network_obj['organizationId'] #this sets the "source" ID
     except Exception as e:
         print(e)
 
@@ -692,7 +548,6 @@ def move(source, template):
     print()
 
    
-    target_oid = ''
     template_obj = None
     try:
         for o in templates:
@@ -705,16 +560,9 @@ def move(source, template):
         return
                     
 
-    print(f"{bc.OKGREEN}Preparing to unbind Network [{bc.WARNING}{network_obj['name']}{bc.OKGREEN}] in [{bc.WARNING}{org_id}{bc.OKGREEN}]{bc.ENDC}")    
+    print(f"{bc.OKGREEN}Preparing to unbind Network [{bc.WARNING}{network_obj['name']}{bc.OKGREEN}] in [{bc.WARNING}{target_oid}{bc.OKGREEN}]{bc.ENDC}")    
 
-    loop = asyncio.get_event_loop()
-    start_time = time()
-    org_devices, org_networks, org_templates = loop.run_until_complete(getEverything())
-    end_time = time()
-    elapsed_time = round(end_time-start_time,2)
-    print(f"Loaded Everything took [{elapsed_time}] seconds")
-    print()
-    
+  
     #input(f"{bc.WARNING}WARNING:{bc.OKGREEN}About to unbind a network from a template.... PRESS ENTER TO CONTINUE{bc.ENDC}")
     #print()
 
@@ -734,7 +582,7 @@ def move(source, template):
     newNet_result = None
     target_netid = None
     try:
-        newNet_result = db.organizations.createOrganizationNetwork(org_id, **newNET)
+        newNet_result = db.organizations.createOrganizationNetwork(destination_org, **newNET)
         print(f"{bc.OKGREEN}Created new Network [{bc.WARNING} {newNET['name']} {bc.OKGREEN}] netID[{bc.WARNING} {newNet_result['id']} {bc.OKGREEN}] {bc.ENDC}")
         target_netid = newNet_result['id']
         #print(newNet_result)
@@ -743,11 +591,35 @@ def move(source, template):
         print(f"{bc.FAIL}Failed to create a new network....{bc.ENDC}")
 
     start_time = time()
-    copyResult = copySettings(db, source, target_netid, template)
+    total_sourceDevices = len(db.networks.getNetworkDevices(source))
+    copyResult = copySettings(db, source, target_netid, template, destination_org)
     end_time = time()
     elapsed_time = round(end_time - start_time,2)
     
+    #/verify the names still match, if your moving between orgs, it'll probaly lose that
+    keepers = [ 'address', 'tags', 'notes', 'name']
+    devs = []
+    while len(devs) != total_sourceDevices:
+        devs = db.networks.getNetworkDevices(target_netid)
+        print(f"Device Count:  Current[{len(devs)}] Expected[{total_sourceDevices}]")
+        if len(devs) != total_sourceDevices:
+            print(f"Waiting for devs to show up in target network.....please wait a few minutes if your moving cross-org")
+            sleep(30)
+        
+    for d in devs:
+        changes = {}
+        sourceDevice = getDevice(org_devices[org_id],d['serial']) #pull the original device objects and verify that the everything matches, otherwise write changes. Needed for cross-org
+        targetDevice_obj = db.devices.getDevice(d['serial'])
+        for k in keepers:
+            if k in sourceDevice:
+                if not k in targetDevice_obj:
+                    changes[k] = sourceDevice[k]
     
+        if len(changes) > 0: #need to update device
+            res = db.devices.updateDevice(d['serial'],**changes)
+            print(f"Updated Device[{d['serial']}] result[{res}]")
+            print()
+    #/end verify 
     
     if copyResult: #if the network was successfully copied, then rename/delete the old one
         oldName = db.networks.getNetwork(source)['name']
@@ -775,8 +647,6 @@ def move(source, template):
 
   
     return
-
-    
 
 
 if __name__ == '__main__':    
