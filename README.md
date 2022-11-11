@@ -9,5 +9,4 @@
   **./rebind.py** \<networkID>  -   This reverses the unbind script, where the networkID is the networkID of the templated network (same used in unbinding) (MX)
   
   **./move.py** \<networkID> \<target_TemplateID>  \<destination_OrgID>-   This moves a network from one template, into another template. Preserving all settings. (MX/MS/MR/MV/MG) **NOW SUPPORTS CROSS-ORG and NAMED SEARCH**
-
-
+  **Named example:** ./move.py "Test Network" "Template-A" "ProductionORG_1"
