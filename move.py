@@ -300,20 +300,34 @@ def copySettings(db, sourceNet, targetNet, target_template, destination_org):
     for sd in sourceNet_devs:
         if sd['model'][:2] in validProducts:
             sourceMX = sd['serial']
-    
-    '''
-    #This isn't needed for a template move, since we're not trying to preserve firmware versions....
-    #LOOP until firmware in target network matches source... so the MX won't re-download FW and reboot
-    while not FW_target == FW_source:
-        FW_raw = db.networks.getNetworkFirmwareUpgrades(targetNet)
-        FW_target = FW_raw['products']['appliance']['currentVersion']['id']
-        print(f"{bc.FAIL}WARNING: {bc.OKGREEN}Waiting for firmware upgrade to finish...currently running fwID[{bc.WARNING}{FW_target}{bc.OKGREEN}] instead of fwID[{bc.WARNING}{FW_source}{bc.OKGREEN}]{bc.ENDC}")
-        sleep(5)
-    '''
 
     #You need to query the templateID, not the sourceNetwork.
     tempNetID = returnTemplateID(db, sourceNet) 
     ports = db.appliance.getNetworkAppliancePorts(tempNetID)
+
+    ### Move MX-SVI
+
+    src_vlans = db.appliance.getNetworkApplianceVlans(sourceNet)
+
+    print()
+    for v in src_vlans:
+        vlan = v['id']
+        keepers = ['subnet','applianceIp', 'fixedIpAssignments', 'reservedIpRanges', 'dhcpHandling', 'dhcpLeaseTime', 'dnsNameservers', 'dhcpOptions', 'dhcpBootOptionsEnabled', 'vlanId']
+        if not 'vlanId' in v: v['vlanId'] = vlan
+        newVlan = {}
+        for tmp in v:
+            if tmp in keepers:
+                newVlan[tmp] = v[tmp]
+        #if newVlan['vlanId'] in dst_GPMAP:
+        #    newVlan['groupPolicyId'] = dst_GPMAP[newVlan['vlanId'] ]
+        #print(newVlan)
+        res = db.appliance.updateNetworkApplianceVlan(targetNet, **newVlan)
+        print(f"Updating VLAN {vlan}")
+        print(f"Before: {newVlan}")
+        print(f"After: {res}")
+
+
+
 
     ### MOVE-MS
     source_switches = {}
