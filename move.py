@@ -248,9 +248,9 @@ def cloneTemplate(db, source_oid, sourceTemplate, target_oid):
                 newVlan[tmp] = v[tmp]
         if newVlan['vlanId'] in dst_GPMAP:
             newVlan['groupPolicyId'] = dst_GPMAP[newVlan['vlanId'] ]
-        #print(newVlan)
+        print(newVlan)
         res = db.appliance.updateNetworkApplianceVlan(newTemplateID, **newVlan)
-        #print(res)
+        print(res)
 
     #remove the default vlan1 if the source doesn't have it
     if getID(src_vlans, 1) == None:
@@ -321,6 +321,10 @@ def copySettings(db, sourceNet, targetNet, target_template, destination_org):
         #if newVlan['vlanId'] in dst_GPMAP:
         #    newVlan['groupPolicyId'] = dst_GPMAP[newVlan['vlanId'] ]
         #print(newVlan)
+        if newVlan['dhcpHandling'] == 'Do not respond to DHCP requests':
+            if 'fixedIpAssignments' in newVlan: newVlan.pop('fixedIpAssignments')
+            if 'reservedIpRanges' in newVlan: newVlan.pop('reservedIpRanges')
+            if 'dnsNameservers' in newVlan: newVlan.pop('dnsNameservers')
         res = db.appliance.updateNetworkApplianceVlan(targetNet, **newVlan)
         print(f"Updating VLAN {vlan}")
         print(f"Before: {newVlan}")
