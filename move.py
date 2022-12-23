@@ -263,19 +263,22 @@ def cloneTemplate(db, source_oid, sourceTemplate, target_oid):
 
 def claimSerials(new_serial, target_netID):
     tmp = None
-    global failed
-    failed = []
+    failed = 0
     while True:
         try:
             db.networks.claimNetworkDevices(target_netID,serials=new_serial)
             break
         except meraki.APIError as me:
             print(me)
-            tmp = me
-            bad_serial = me.message['errors'][0].split("'")[1]
-            print(f"Removing bad serial {bad_serial}")
-            new_serial.remove(bad_serial)
-            failed.append(bad_serial)
+            print()
+            print(f"Unable to claim serial, trying again in 1 minute...")
+            sleep(60)
+            print()
+            if failed >= 15:
+                print(f"Unable to claim serial, exiting")
+                break
+            else:
+                failed += 1
     print()
     print(f"Done. Total claimed licenses[{len(new_serial)}] and failed[{len(failed)}]")
     print(f"Claimed Serials[{new_serial}]")
