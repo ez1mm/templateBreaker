@@ -280,7 +280,7 @@ def claimSerials(new_serial, target_netID):
             else:
                 failed += 1
     print()
-    print(f"Done. Total claimed licenses[{len(new_serial)}] and failed[{len(failed)}]")
+    print(f"Done. Total claimed licenses[{len(new_serial)}] and failed[{failed}]")
     print(f"Claimed Serials[{new_serial}]")
     print(f"Failed Serials: {failed}")
     return
